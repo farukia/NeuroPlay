@@ -92,7 +92,7 @@ export default function App() {
     }
 
     try {
-      const response = await fetch('http://192.168.1.210:8081/predict', {
+      const response = await fetch('http://192.168.1.210:5000/predict', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,10 +101,19 @@ export default function App() {
       });
 
       const result = await response.json();
-      Alert.alert('Prediction Result', `Prediction: ${result.prediction}`);
+
+      if (response.ok && result.prediction !== undefined) {
+        Alert.alert(
+          'Prediction Result',
+          `Prediction: ${result.prediction === 1 ? 'Parkinson’s Detected' : 'No Parkinson’s'}\nConfidence: ${(result.confidence * 100).toFixed(2)}%`
+        );
+      } else {
+        Alert.alert('Backend Error', result.error || 'An unknown error occurred.');
+        console.error('Backend error:', result.error);
+      }
     } catch (error) {
-      console.error('Error:', error);
-      Alert.alert('Error', 'Could not connect to backend.');
+      console.error('Network error:', error);
+      Alert.alert('Connection Error', 'Could not connect to the backend.');
     }
   };
 
@@ -174,11 +183,7 @@ export default function App() {
                 {lastStroke ? (
                   lastStroke.map((point, i) => (
                     <Text key={i} style={styles.dataText}>
-                      {`x: ${point.x.toFixed(1)}, y: ${point.y.toFixed(
-                        1
-                      )}, pressure: ${point.pressure.toFixed(2)}, ts: ${
-                        point.timestamp
-                      }`}
+                      {`x: ${point.x.toFixed(1)}, y: ${point.y.toFixed(1)}, pressure: ${point.pressure.toFixed(2)}, ts: ${point.timestamp}`}
                     </Text>
                   ))
                 ) : (
@@ -192,7 +197,7 @@ export default function App() {
             <View style={styles.footer}>
               <Button title="Start Again" onPress={handleStartAgain} color="#d9534f" />
               <View style={{ height: 10 }} />
-              <Button title="Submit to Backend" onPress={handleSendToBackend} color="#4a90e2" />
+              <Button title="Track" onPress={handleSendToBackend} color="#4a90e2" />
             </View>
           </>
         )}
@@ -289,6 +294,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   voiceButton: {
-    backgroundColor: '#888', // Different color to distinguish "Voice"
+    backgroundColor: '#888',
   },
 });
