@@ -111,10 +111,21 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        {/* Title Section */}
+        <View style={styles.header}>
+          <Text style={styles.title}>NeuroPlay</Text>
+          <Text style={styles.subtitle}>Games for tracking Parkinson's</Text>
+        </View>
+
+        {/* Initial Buttons */}
         {!started && (
           <View style={styles.centered}>
             <TouchableOpacity style={styles.customButton} onPress={handleStart}>
-              <Text style={styles.customButtonText}>Start</Text>
+              <Text style={styles.customButtonText}>Drawing</Text>
+            </TouchableOpacity>
+            <View style={{ height: 20 }} />
+            <TouchableOpacity style={[styles.customButton, styles.voiceButton]} onPress={() => {}}>
+              <Text style={styles.customButtonText}>Voice</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -198,8 +209,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 30,
-    justifyContent: 'space-between',
+    paddingTop: 10,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 30,
+    marginTop: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#4a90e2',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
   },
   centered: {
     flex: 1,
@@ -262,5 +287,8 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '700',
     fontSize: 18,
+  },
+  voiceButton: {
+    backgroundColor: '#888', // Different color to distinguish "Voice"
   },
 });
