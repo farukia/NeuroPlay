@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { TouchableOpacity } from 'react-native';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 
 const { width, height } = Dimensions.get('window');
 
@@ -22,6 +24,11 @@ export default function App() {
   const [paths, setPaths] = useState([]);
   const [lastStroke, setLastStroke] = useState(null);
   const currentStrokeRef = useRef([]);
+
+  const [recording, setRecording] = useState(null);
+  const [recordedURI, setRecordedURI] = useState(null);
+  const [recordingActive, setRecordingActive] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -117,23 +124,104 @@ export default function App() {
     }
   };
 
+  const startRecording = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission denied', 'Microphone access is required.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setRecordingActive(true);
+    } catch (err) {
+      console.error('Recording failed', err);
+      Alert.alert('Error', 'Failed to start recording.');
+    }
+  };
+
+  const stopRecording = async () => {
+    try {
+      setRecordingActive(false);
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecordedURI(uri);
+      setRecording(null);
+      console.log('Saved audio:', uri);
+    } catch (err) {
+      console.error('Stop recording failed', err);
+    }
+  };
+
+  const sendVoiceToBackend = async () => {
+    if (!recordedURI) {
+      Alert.alert('No recording', 'Please record your voice first.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: recordedURI,
+      name: 'voice.wav',
+      type: 'audio/wav',
+    });
+
+    try {
+      const res = await fetch('http://192.168.1.210:5000/voice-predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (res.ok) {
+        Alert.alert(
+          'Prediction',
+          `Voice Prediction: ${result.prediction === 1 ? 'Parkinson’s Detected' : 'No Parkinson’s'}\nConfidence: ${(result.confidence * 100).toFixed(2)}%`
+        );
+      } else {
+        console.error(result);
+        Alert.alert('Error', 'Prediction failed.');
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', 'Could not reach backend.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Title Section */}
         <View style={styles.header}>
           <Text style={styles.title}>NeuroPlay</Text>
           <Text style={styles.subtitle}>Games for tracking Parkinson's</Text>
         </View>
 
-        {/* Initial Buttons */}
-        {!started && (
+        {!started && !voiceMode && (
           <View style={styles.centered}>
             <TouchableOpacity style={styles.customButton} onPress={handleStart}>
               <Text style={styles.customButtonText}>Drawing</Text>
             </TouchableOpacity>
             <View style={{ height: 20 }} />
-            <TouchableOpacity style={[styles.customButton, styles.voiceButton]} onPress={() => {}}>
+            <TouchableOpacity
+              style={[styles.customButton, styles.voiceButton]}
+              onPress={() => {
+                setVoiceMode(true);
+                setStarted(false);
+                setShowImage(false);
+              }}
+            >
               <Text style={styles.customButtonText}>Voice</Text>
             </TouchableOpacity>
           </View>
@@ -201,41 +289,57 @@ export default function App() {
             </View>
           </>
         )}
+
+        {voiceMode && (
+          <View style={styles.centered}>
+            <Text style={{ fontSize: 18, marginBottom: 20 }}>
+              Please say: “The quick brown fox jumps over the lazy dog.”
+            </Text>
+
+            <TouchableOpacity
+              style={styles.customButton}
+              onPress={recordingActive ? stopRecording : startRecording}
+            >
+              <Text style={styles.customButtonText}>
+                {recordingActive ? 'Stop Recording' : 'Start Recording'}
+              </Text>
+            </TouchableOpacity>
+
+            {recordedURI && (
+              <>
+                <Text style={{ marginTop: 20 }}>Recorded!</Text>
+                <TouchableOpacity
+                  style={[styles.customButton, { backgroundColor: '#4caf50', marginTop: 10 }]}
+                  onPress={sendVoiceToBackend}
+                >
+                  <Text style={styles.customButtonText}>Send to Backend</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.customButton, { marginTop: 30, backgroundColor: '#999' }]}
+              onPress={() => {
+                setVoiceMode(false);
+                setRecordedURI(null);
+              }}
+            >
+              <Text style={styles.customButtonText}>Back</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f5f7fa',
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 30,
-    marginTop: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#4a90e2',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  safeArea: { flex: 1, backgroundColor: '#f5f7fa' },
+  container: { flex: 1, paddingHorizontal: 20, paddingTop: 10 },
+  header: { alignItems: 'center', marginBottom: 30, marginTop: 20 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#4a90e2' },
+  subtitle: { fontSize: 14, color: '#666', marginTop: 4 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   image: {
     width: width * 0.8,
     height: height * 0.5,
@@ -251,25 +355,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     marginBottom: 15,
   },
-  dataContainer: {
-    flex: 0.4,
-  },
-  dataTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 6,
-    color: '#333',
-  },
+  dataContainer: { flex: 0.4 },
+  dataTitle: { fontSize: 16, fontWeight: '700', marginBottom: 6, color: '#333' },
   logContainer: {
     backgroundColor: '#eef2f7',
     padding: 10,
     borderRadius: 8,
   },
-  dataText: {
-    fontSize: 12,
-    color: '#555',
-    lineHeight: 18,
-  },
+  dataText: { fontSize: 12, color: '#555', lineHeight: 18 },
   footer: {
     paddingVertical: 12,
     borderTopWidth: 1,
@@ -288,12 +381,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
   },
-  customButtonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  voiceButton: {
-    backgroundColor: '#888',
-  },
+  customButtonText: { color: 'white', fontWeight: '700', fontSize: 18 },
+  voiceButton: { backgroundColor: '#888' },
 });
